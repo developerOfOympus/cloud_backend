@@ -3,6 +3,8 @@ const fs = require('fs');
 const file_upload = require('express-fileupload');
 const path = require('path')
 
+const data_path = path.resolve(__dirname, '../../../data');
+
 const app = express();
 
 app.use(file_upload());
@@ -17,7 +19,6 @@ const allowed_extensions = [
 // Uploading a file
 app.post('/file/:dir', (req, res)=>{
 
-    console.log('holaa');
     if (!req.files || Object.keys(req.files).length === 0) {
         return res.status(400).json({
             status: "error",
@@ -45,8 +46,8 @@ app.post('/file/:dir', (req, res)=>{
     }
 
     // Building the path
-    let dirname = dir.replace('-', '/');
-    let full_path = path.resolve(__dirname, `../../../data/${dirname}`);
+    let dirname = processDir(dirname);
+    let full_path = path.resolve(data_path, dirname);
     console.log(full_path);
     // Verifying the path
     if(!fs.existsSync(full_path)){
@@ -75,15 +76,13 @@ app.post('/file/:dir', (req, res)=>{
 
 });
 
-app.get('/file/:dir', (req, res)=>{
+// Read a directory
+app.get('/directory/:dir', (req, res)=>{
 
     let dir = req.params.dir === '_'? '':req.params.dir;
+    dir = processDir(dir);
 
-    dir = dir.replace(new RegExp('-', 'gi'), '/');
-    dir = dir.replace(new RegExp('%20', 'gi'), ' ');
-
-    let full_path = path.resolve(__dirname, `../../../data/${dir}`);
-    console.log(full_path);
+    let full_path = path.resolve(data_path, dir);
 
     if(!fs.existsSync(full_path)){
         return res.status(404).json({
@@ -108,15 +107,12 @@ app.get('/file/:dir', (req, res)=>{
         files.forEach(element => {
             console.log(element);
             let extension = getExtension(element);
-            console.log("extension",element);
 
-
-            if(extension in allowed_extensions){
+            if(allowed_extensions.indexOf(extension)>=0){
                 data.push(element);
             }
         });
 
-        console.log(data);
 
         return res.json({
             "status":"success",
@@ -124,6 +120,83 @@ app.get('/file/:dir', (req, res)=>{
         });
     })
 })
+
+app.get('/file/:dir', (req, res)=>{
+
+    let dir = req.params.dir;
+    dir = processDir(dir);
+
+    let full_path = path.resolve(data_path, dir);
+    console.log(full_path);
+    if(!fs.existsSync(full_path)){
+        return res.status(404).json({
+            "status":"error",
+            "error": {
+                "message": "The file does not exist"
+            }
+        });
+    }
+
+    res.sendFile(full_path);
+
+})
+
+// Create a new directory
+app.post('/directory/:dir', (req, res)=>{
+
+    let dir = req.params.dir;
+    dir = processDir(dir);
+
+    let full_path = path.resolve(data_path, dir);
+    fs.mkdirSync(full_path);
+
+    res.json({
+        "status":"success",
+        "message":"Directory created"
+    });
+
+});
+
+app.delete('/directory/:dir', (req, res)=>{
+    let dir = req.params.dir;
+    dir = processDir(dir);
+
+    let full_path = path.resolve(data_path, dir);
+
+    if(!fs.existsSync(full_path)){
+        return res.status(404).json({
+            "status":"error",
+            "error":{
+                "message":"Directory does not exist"
+            }
+        });
+    }
+
+    let error = undefined;
+
+    // Deleting directory
+    fs.rmdir(full_path, (err)=>{
+        error = err;
+    });
+
+    if(error){
+        return res.status(500).json({
+            "status":"error",
+            error
+        });
+    }
+    res.json({
+        "status":"success",
+        "message": "Directory has been removed"
+    });
+
+});
+
+let processDir = (dir)=>{
+    dir = dir.replace(new RegExp('>', 'gi'), '/');
+    dir = dir.replace(new RegExp('%20', 'gi'), ' ');
+    return dir;
+}
 
 let getExtension = (element)=>{
     let split = element.split('.');
